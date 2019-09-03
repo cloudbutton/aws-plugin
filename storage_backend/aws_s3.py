@@ -34,8 +34,6 @@ class StorageBackend:
         logger.debug("Set AWS S3 Endpoint to {}".format(service_endpoint))
 
         logger.debug("AWS S3 using access_key_id and secret_access_key")
-        access_key = s3_config.get('access_key_id')
-        secret_key = s3_config.get('secret_access_key')
 
         client_config = botocore.client.Config(
             max_pool_connections=128,
@@ -44,8 +42,8 @@ class StorageBackend:
         
         self.cos_client = boto3.client(
             's3',
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
+            aws_access_key_id=s3_config['access_key_id'],
+            aws_secret_access_key=s3_config['secret_access_key'],
             config=client_config,
             endpoint_url=service_endpoint)
 
