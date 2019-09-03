@@ -4,7 +4,13 @@ import boto3
 import botocore
 import time
 import json
+import zipfile
+import sys
+import pip
+import tempfile
+import pywren_ibm_cloud
 from pywren_ibm_cloud.version import __version__
+from pywren_ibm_cloud.storage.storage import LOCAL_HOME_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +26,13 @@ class ComputeBackend:
         self.aws_lambda_config = aws_lambda_config
         self.package = 'pywren_v'+__version__
         self.region = aws_lambda_config['region_name']
-        self.role = aws_lambda_config['role']
+        self.role = aws_lambda_config['execution_role']
+        self.layer_key = self.package.replace('.', '-')+'_dependencies'
 
         self.lambda_client = self.client = boto3.client(
             'lambda',
-            aws_access_key_id=aws_lambda_config.get('access_key_id'),
-            aws_secret_access_key=aws_lambda_config.get('secret_access_key'),
+            aws_access_key_id=aws_lambda_config['access_key_id'],
+            aws_secret_access_key=aws_lambda_config['secret_access_key'],
             region_name=self.region
         )
 
@@ -59,6 +66,16 @@ class ComputeBackend:
         else:
             return function_name, memory
     
+    def _check_dependencies_layer(self, runtime_name):
+        layers = self.list_layers(runtime_name)
+        dep_layer = list(filter(lambda x: x['LayerName'] == self.layer_key, layers))
+        if len(dep_layer) != 0:
+            layer = dep_layer.pop()
+            arn = layer['LatestMatchingVersion']['LayerVersionArn']
+        else:
+            arn = None
+        return arn
+    
     def _get_scipy_layer_arn(self, runtime_name):
         acc_id = {
             'us-east-1' : 668099181075,
@@ -72,11 +89,98 @@ class ComputeBackend:
             'eu-north-1' : 642425348156
         }
         
-        runtime_name = runtime_name.replace('p', 'P')
-        arn = 'arn:aws:lambda:'+self.region+':'+acc_id[self.region]+':layer:AWSLambda-'+runtime_name+'-SciPy1x:2'
+        runtime_name = runtime_name.replace('p', 'P').replace('.', '')
+        arn = 'arn:aws:lambda:'+self.region+':'+str(acc_id[self.region])+':layer:AWSLambda-'+runtime_name+'-SciPy1x:2'
         return arn
+    
+    def _build_dependencies_layer(self):
+        def add_folder_to_zip(zip_file, full_dir_path, sub_dir=''):
+            for file in os.listdir(full_dir_path):
+                full_path = os.path.join(full_dir_path, file)
+                if os.path.isfile(full_path):
+                    zip_file.write(full_path, os.path.join(sub_dir, file), zipfile.ZIP_DEFLATED)
+                elif os.path.isdir(full_path) and '__pycache__' not in full_path:
+                    add_folder_to_zip(zip_file, full_path, os.path.join(sub_dir, file))
 
-    def update_runtime(self, runtime_name, code, memory=3008, timeout=900, layers=[]):
+        # Path where modules will be downloaded
+        zip_path = os.path.join(tempfile.gettempdir(), 'pywren_dependencies.zip')
+        install_path = os.path.join(tempfile.gettempdir(), 'modules', 'python')
+        
+        # Get modules name & version from requirements.txt
+        base_path = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
+        requirements_path = os.path.join(base_path, 'compute', 'backends', 'aws_lambda', 'requirements.txt')
+        dependencies = []
+
+        with open(requirements_path, 'r') as requirements_file:
+            dependencies = requirements_file.readlines()
+        if not (os.path.isdir(install_path)):
+            os.makedirs(install_path)
+        
+        # Install modules
+        dependencies.insert(0, 'install')
+        dependencies += ['-t', install_path, '--system']
+        old_stdout = sys.stdout     # Disable stdout
+        sys.stdout = open(os.devnull, 'w')
+        pip.main(dependencies)
+        sys.stdout = old_stdout
+
+        # Compress modules
+        with zipfile.ZipFile(zip_path, 'w') as layer_zip:
+            add_folder_to_zip(layer_zip, os.path.join(tempfile.gettempdir(), 'modules'))
+
+        # Read zip as bytes
+        with open(zip_path, 'rb') as layer_zip:
+            layer_bytes = layer_zip.read()
+        
+        return layer_bytes
+    
+    def _setup_layers(self, runtime_name):
+        layers_arn = []
+        dependencies_layer = self._check_dependencies_layer(runtime_name)
+
+        if dependencies_layer is None:
+            layer_bytes = self._build_dependencies_layer()
+            # Upload dependencies layer from bytes zip
+            dependencies_layer = self.create_layer(
+                self.layer_key,
+                runtime_name,
+                layer_bytes)
+        
+        layers_arn.append(dependencies_layer)
+        layers_arn.append(self._get_scipy_layer_arn(runtime_name))
+        return layers_arn
+
+    def _create_handler_bin(self):
+        zip_location = os.path.join(tempfile.gettempdir(), 'cloudbutton_aws_lambda.zip')
+        logger.debug("Creating function handler zip in {}".format(zip_location))
+
+        def add_folder_to_zip(zip_file, full_dir_path, sub_dir=''):
+            for file in os.listdir(full_dir_path):
+                full_path = os.path.join(full_dir_path, file)
+                if os.path.isfile(full_path):
+                    zip_file.write(full_path, os.path.join('pywren_ibm_cloud', sub_dir, file), zipfile.ZIP_DEFLATED)
+                elif os.path.isdir(full_path) and '__pycache__' not in full_path:
+                    add_folder_to_zip(zip_file, full_path, os.path.join(sub_dir, file))
+
+        try:
+            with zipfile.ZipFile(zip_location, 'w') as ibmcf_pywren_zip:
+                current_location = os.path.dirname(os.path.abspath(__file__))
+                module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
+                main_file = os.path.join(current_location, 'entry_point.py')
+                ibmcf_pywren_zip.write(main_file, '__main__.py', zipfile.ZIP_DEFLATED)
+                add_folder_to_zip(ibmcf_pywren_zip, module_location)
+
+            with open(zip_location, "rb") as action_zip:
+                action_bin = action_zip.read()
+        except Exception as e:
+            raise Exception('Unable to create the {} package: {}'.format(zip_location, e))
+        return action_bin
+        
+    
+    def build_runtime(self):
+        pass
+
+    def update_runtime(self, runtime_name, code, memory=3008, timeout=900):
 
         function_name, memory, timeout = self._check_params(runtime_name, memory, timeout)        
 
@@ -92,6 +196,8 @@ class ComputeBackend:
             msg = 'An error occurred updating function code {}: {}'.format(function_name, response)
             raise Exception(msg)
 
+        layers = self._setup_layers(runtime_name)
+
         response = self.client.update_function_configuration(
             FunctionName=function_name,
             Role=self.role,
@@ -101,27 +207,22 @@ class ComputeBackend:
         )
 
         if response['ResponseMetadata']['HTTPStatusCode'] == 201:
-            logger.debug("OK --> Updated function code {}".format(function_name))
+            logger.debug("OK --> Updated function config {}".format(function_name))
         else:
             msg = 'An error occurred updating function config {}: {}'.format(function_name, response)
             raise Exception(msg)
 
-    def create_runtime(self, runtime_name, memory=3008, code=None, timeout=900, layers=[]):
+    def create_runtime(self, runtime_name, memory=3008, code=None, timeout=900):
         """
         Create an AWS Lambda function
         """
         function_name, memory, timeout = self._check_params(runtime_name, memory, timeout)
         logger.debug('I am about to create a new lambda function: {}'.format(function_name))
 
-        # Upload layer from bytes zip
-        layers_arn = []
-        for layer in layers:
-            layer_arn = self.create_layer(
-                self.package.replace('.', '-')+'_layer',
-                runtime_name,
-                layer)
-            layers_arn.append(layer_arn)
-        layers_arn.append(self._get_scipy_layer_arn(runtime_name))
+        layers = self._setup_layers(runtime_name)
+
+        if code is None:
+            code = self._create_handler_bin()
 
         try:
             response = self.client.create_function(
@@ -135,7 +236,7 @@ class ComputeBackend:
                 Description=self.package,
                 Timeout=timeout,
                 MemorySize=memory,
-                Layers=layers_arn
+                Layers=layers
             )
 
             if response['ResponseMetadata']['HTTPStatusCode'] == 201:
@@ -145,8 +246,7 @@ class ComputeBackend:
                 raise Exception(msg)        
         except self.client.exceptions.ResourceConflictException:
             logger.debug('{} lambda function already exists. It will be replaced.')
-            layers.extend(self.list_layers(runtime_name=runtime_name))
-            self.update_runtime(runtime_name, code, memory, timeout, layers)
+            self.update_runtime(runtime_name, code, memory, timeout)
 
     def delete_runtime(self, runtime_name, memory):
         logger.debug("I am about to delete lambda function: {}".format(runtime_name))
@@ -227,10 +327,7 @@ class ComputeBackend:
             CompatibleRuntime=runtime_name
         )
 
-        layers = []
-        for layer in response['Layers']:
-            layers.append(layer['LayerArn'])
-        return layers
+        return response['Layers']
 
     def invoke(self, runtime_name, runtime_memory, payload, self_invoked=False):
         """
@@ -239,7 +336,7 @@ class ComputeBackend:
         exec_id = payload['executor_id']
         call_id = payload['call_id']
 
-        function_name, memory = self._check_params(runtime_name, runtime_memory)
+        function_name, _ = self._check_params(runtime_name, runtime_memory)
 
         start = time.time()
         try:
@@ -279,7 +376,7 @@ class ComputeBackend:
         """
         Invoke lambda function and wait for result
         """
-        function_name, memory = self._check_params(runtime_name, runtime_memory)
+        function_name, _ = self._check_params(runtime_name, runtime_memory)
 
         response = self.client.invoke(
             FunctionName=function_name,
@@ -298,3 +395,33 @@ class ComputeBackend:
         runtime_key = os.path.join(self.name, self.region, self.region, action_name)
 
         return runtime_key
+    
+    def generate_runtime_meta(self, runtime_name):
+        module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
+        meta_action_location = os.path.join(module_location, 'compute', 'backends', 'aws_lambda', 'extract_preinstalls_fn.py')
+        modules_zip_action = os.path.join(module_location, 'extract_modules.zip')
+
+        with zipfile.ZipFile(modules_zip_action, 'w') as extract_modules_zip:
+            extract_modules_zip.write(meta_action_location, '__main__.py')
+            extract_modules_zip.close()
+        with open(modules_zip_action, 'rb') as modules_zip:
+            action_code = modules_zip.read()
+
+        memory = 192
+        self.create_runtime(runtime_name, memory, code=action_code)
+        logger.debug("Extracting Python modules list from: {}".format(runtime_name))
+
+        try:
+            runtime_meta = self.invoke_with_result(runtime_name, memory)
+        except Exception:
+            raise("Unable to invoke 'modules' action")
+        try:
+            self.delete_runtime(runtime_name, memory)
+        except Exception:
+            raise("Unable to delete 'modules' action")
+
+        if 'preinstalls' not in runtime_meta:
+            raise Exception(runtime_meta)
+
+        return runtime_meta
+

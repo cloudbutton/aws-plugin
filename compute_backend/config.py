@@ -14,12 +14,15 @@ def load_config(config_data=None):
 
     if 'aws' not in config_data and 'aws_lambda' not in config_data:
         raise Exception("'aws' and 'aws_lambda' sections are mandatory in the configuration")
+    
+    # Put credential keys to 'aws_lambda' dict entry
+    config_data['aws_lambda'] = {**config_data['aws_lambda'], **config_data['aws']}
 
     required_parameters_0 = ('access_key_id', 'secret_access_key')
     if not set(required_parameters_0) <= set(config_data['aws']):
         raise Exception("'access_key_id' and 'secret_access_key' are mandatory under 'aws' section")
 
     required_parameters_1 = ('region_name', 'execution_role')
-    if not set(required_parameters_1) <= set(config_data['aws']):
+    if not set(required_parameters_1) <= set(config_data['aws_lambda']):
         raise Exception("'region_name' and 'execution_role' are mandatory under 'aws_lambda' section")
     
