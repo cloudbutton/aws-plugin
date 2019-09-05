@@ -1,5 +1,5 @@
 
-# cloud-button-aws-plugin
+# Cloud Button AWS Lambda Plugin
 Cloudbutton toolkit plugin for Amazon Lambda and Amazon S3
 
 - CloudButton Project: [http://cloudbutton.eu/](http://cloudbutton.eu/)
