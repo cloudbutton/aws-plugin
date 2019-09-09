@@ -26,7 +26,7 @@ class ComputeBackend:
         self.name = 'aws_lambda'
         self.aws_lambda_config = aws_lambda_config
         self.package = 'pywren_v'+__version__
-        self.region = aws_lambda_config['region_name']
+        self.region = aws_lambda_config['region']
         self.role = aws_lambda_config['execution_role']
         self.layer_key = self.package.replace('.', '-')+'_dependencies'
 
@@ -121,6 +121,7 @@ class ComputeBackend:
         # Install modules
         dependencies.insert(0, 'install')
         dependencies += ['-t', install_path, '--system']
+        dependencies = list(filter(lambda x : x.rstrip(), dependencies))
         old_stdout = sys.stdout     # Disable stdout
         sys.stdout = open(os.devnull, 'w')
         pip.main(dependencies)
