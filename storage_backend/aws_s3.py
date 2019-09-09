@@ -40,7 +40,7 @@ class StorageBackend:
             user_agent_extra='pywren',
             connect_timeout=1)
         
-        self.cos_client = boto3.client(
+        self.s3_client = boto3.client(
             's3',
             aws_access_key_id=s3_config['access_key_id'],
             aws_secret_access_key=s3_config['secret_access_key'],
@@ -52,7 +52,7 @@ class StorageBackend:
         Get ibm_boto3 client.
         :return: ibm_boto3 client
         """
-        return self.cos_client
+        return self.s3_client
 
     def put_object(self, bucket_name, key, data):
         """
@@ -63,7 +63,7 @@ class StorageBackend:
         :return: None
         """
         try:
-            res = self.cos_client.put_object(Bucket=bucket_name, Key=key, Body=data)
+            res = self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=data)
             status = 'OK' if res['ResponseMetadata']['HTTPStatusCode'] == 200 else 'Error'
             try:
                 logger.debug('PUT Object {} - Size: {} - {}'.format(key, sizeof_fmt(len(data)), status))
@@ -71,7 +71,7 @@ class StorageBackend:
                 logger.debug('PUT Object {} {}'.format(key, status))
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == "NoSuchKey":
-                raise StorageNoSuchKeyError(key)
+                raise StorageNoSuchKeyError(bucket_name, key)
             else:
                 raise e
 
@@ -83,7 +83,7 @@ class StorageBackend:
         :rtype: str/bytes
         """
         try:
-            r = self.cos_client.get_object(Bucket=bucket_name, Key=key, **extra_get_args)
+            r = self.s3_client.get_object(Bucket=bucket_name, Key=key, **extra_get_args)
             if stream:
                 data = r['Body']
             else:
@@ -91,7 +91,7 @@ class StorageBackend:
             return data
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == "NoSuchKey":
-                raise StorageNoSuchKeyError(key)
+                raise StorageNoSuchKeyError(bucket_name, key)
             else:
                 raise e
 
@@ -103,11 +103,11 @@ class StorageBackend:
         :rtype: str/bytes
         """
         try:
-            metadata = self.cos_client.head_object(Bucket=bucket_name, Key=key)
+            metadata = self.s3_client.head_object(Bucket=bucket_name, Key=key)
             return metadata['ResponseMetadata']['HTTPHeaders']
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == '404':
-                raise StorageNoSuchKeyError(key)
+                raise StorageNoSuchKeyError(bucket_name, key)
             else:
                 raise e
 
@@ -117,7 +117,7 @@ class StorageBackend:
         :param bucket: bucket name
         :param key: data key
         """
-        return self.cos_client.delete_object(Bucket=bucket_name, Key=key)
+        return self.s3_client.delete_object(Bucket=bucket_name, Key=key)
 
     def delete_objects(self, bucket_name, key_list):
         """
@@ -130,31 +130,49 @@ class StorageBackend:
         for i in range(0, len(key_list), max_keys_num):
             delete_keys = {'Objects': []}
             delete_keys['Objects'] = [{'Key': k} for k in key_list[i:i+max_keys_num]]
-            result.append(self.cos_client.delete_objects(Bucket=bucket_name, Delete=delete_keys))
+            result.append(self.s3_client.delete_objects(Bucket=bucket_name, Delete=delete_keys))
         return result
-
+    
     def bucket_exists(self, bucket_name):
         """
         Head bucket from COS with a name. Throws StorageNoSuchKeyError if the given bucket does not exist.
         :param bucket_name: name of the bucket
-        :return: Data of the object
+        """
+        try:
+            self.s3_client.head_bucket(Bucket=bucket_name)
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                raise StorageNoSuchKeyError(bucket_name, '')
+            else:
+                raise e
+
+    def head_bucket(self, bucket_name):
+        """
+        Head bucket from COS with a name. Throws StorageNoSuchKeyError if the given bucket does not exist.
+        :param bucket_name: name of the bucket
+        :return: Metadata of the bucket
         :rtype: str/bytes
         """
         try:
-            self.cos_client.head_bucket(Bucket=bucket_name)
+            return self.s3_client.head_bucket(Bucket=bucket_name)
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == '404':
-                raise StorageNoSuchKeyError(bucket_name)
+                raise StorageNoSuchKeyError(bucket_name, '')
             else:
                 raise e
 
     def list_objects(self, bucket_name, prefix=None):
-        paginator = self.cos_client.get_paginator('list_objects_v2')
+        """
+        Return a list of objects for the given bucket and prefix.
+        :param bucket_name: Name of the bucket.
+        :param prefix: Prefix to filter object names.
+        :return: List of objects in bucket that match the given prefix.
+        :rtype: list of str
+        """
         try:
-            if (prefix is not None):
-                page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-            else:
-                page_iterator = paginator.paginate(Bucket=bucket_name)
+            prefix = '' if prefix is None else prefix
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
             object_list = []
             for page in page_iterator:
@@ -164,28 +182,31 @@ class StorageBackend:
             return object_list
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == '404':
-                raise StorageNoSuchKeyError(bucket_name)
+                raise StorageNoSuchKeyError(bucket_name, '' if prefix is None else prefix)
             else:
                 raise e
 
-    def list_keys_with_prefix(self, bucket_name, prefix):
+    def list_keys(self, bucket_name, prefix=None):
         """
         Return a list of keys for the given prefix.
+        :param bucket_name: Name of the bucket.
         :param prefix: Prefix to filter object names.
         :return: List of keys in bucket that match the given prefix.
         :rtype: list of str
         """
-        if not prefix:
-            prefix = ''
-        paginator = self.cos_client.get_paginator('list_objects_v2')
-        operation_parameters = {'Bucket': bucket_name,
-                                'Prefix': prefix}
-        page_iterator = paginator.paginate(**operation_parameters)
+        try:
+            prefix = '' if prefix is None else prefix
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
-        key_list = []
-        for page in page_iterator:
-            if 'Contents' in page:
-                for item in page['Contents']:
-                    key_list.append(item['Key'])
-
-        return key_list
+            key_list = []
+            for page in page_iterator:
+                if 'Contents' in page:
+                    for item in page['Contents']:
+                        key_list.append(item['Key'])
+            return key_list
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                raise StorageNoSuchKeyError(bucket_name, prefix)
+            else:
+                raise e
