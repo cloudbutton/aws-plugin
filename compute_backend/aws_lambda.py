@@ -1,4 +1,5 @@
 import os
+import shutil
 import logging
 import boto3
 import botocore
@@ -50,23 +51,12 @@ class ComputeBackend:
         runtime_name = split[1].replace('-', '.')
         runtime_memory = int(split[2].replace('MB', ''))
         return runtime_name, runtime_memory
-    
-    def _check_params(self, runtime_name, memory, timeout=None):
-        if timeout is not None and timeout > 900:
-            logger.info('Warning: Timeout for lambda functions set to 900 s. {} is not allowed'.format(timeout))
-            timeout = 900
-        if memory > 3008:
-            logger.info('Warning: Memory size for lambda functions set to 3008 MB. {} MB is not allowed'.format(memory))
-            memory = 3008
         
-        function_name = self._format_action_name(runtime_name, memory)
-
-        if timeout is not None:
-            return function_name, memory, timeout
-        else:
-            return function_name, memory
-    
     def _check_dependencies_layer(self, runtime_name):
+        """
+        Checks if PyWren dependencies layer is already deployed
+        returns : arn if deployed, else None
+        """
         layers = self.list_layers(runtime_name)
         dep_layer = list(filter(lambda x: x['LayerName'] == self.layer_key, layers))
         if len(dep_layer) != 0:
@@ -77,6 +67,10 @@ class ComputeBackend:
         return arn
     
     def _get_scipy_layer_arn(self, runtime_name):
+        """
+        Retruns arn for the existing numerics lambda layer basen on region
+        return : layer arn
+        """
         acc_id = {
             'us-east-1' : 668099181075,
             'us-east-2' : 259788987135,
@@ -94,6 +88,10 @@ class ComputeBackend:
         return arn
     
     def _build_dependencies_layer(self):
+        """
+        Downloads and builds module dependencies for PyWren lambda execution
+        return : layer zip bytes
+        """
         def add_folder_to_zip(zip_file, full_dir_path, sub_dir=''):
             for file in os.listdir(full_dir_path):
                 full_path = os.path.join(full_dir_path, file)
@@ -105,6 +103,10 @@ class ComputeBackend:
         # Path where modules will be downloaded
         zip_path = os.path.join(tempfile.gettempdir(), 'pywren_dependencies.zip')
         install_path = os.path.join(tempfile.gettempdir(), 'modules', 'python')
+        if os.path.exists(install_path) and os.path.isdir(install_path):
+            shutil.rmtree(install_path)
+        elif os.path.exists(install_path) and os.path.isfile(install_path):
+            os.remove(install_path)
         
         # Get modules name & version from requirements.txt
         base_path = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
@@ -135,6 +137,9 @@ class ComputeBackend:
         return layer_bytes
     
     def _setup_layers(self, runtime_name):
+        """
+        Setups and creates lambda layers for PyWren function execution
+        """
         layers_arn = []
         dependencies_layer = self._check_dependencies_layer(runtime_name)
 
@@ -151,6 +156,10 @@ class ComputeBackend:
         return layers_arn
 
     def _create_handler_bin(self):
+        """
+        Creates PyWren handler zip
+        return : zip binary
+        """
         zip_location = os.path.join(tempfile.gettempdir(), 'cloudbutton_aws_lambda.zip')
         logger.debug("Creating function handler zip in {}".format(zip_location))
 
@@ -181,8 +190,11 @@ class ComputeBackend:
         pass
 
     def update_runtime(self, runtime_name, code, memory=3008, timeout=900):
-
-        function_name, memory, timeout = self._check_params(runtime_name, memory, timeout)        
+        """
+        Updates code, memory and time of existing lambda function
+        """
+        function_name = self._format_action_name(runtime_name, memory)        
+        logger.debug('Updating function {} code/config'.format(function_name))
 
         response = self.client.update_function_code(
             FunctionName=function_name,
@@ -216,8 +228,8 @@ class ComputeBackend:
         """
         Create an AWS Lambda function
         """
-        function_name, memory, timeout = self._check_params(runtime_name, memory, timeout)
-        logger.debug('I am about to create a new lambda function: {}'.format(function_name))
+        function_name = self._format_action_name(runtime_name, memory)
+        logger.debug('Creating new lambda runtime: {}'.format(function_name))
 
         layers = self._setup_layers(runtime_name)
 
@@ -249,9 +261,12 @@ class ComputeBackend:
             self.update_runtime(runtime_name, code, memory, timeout)
 
     def delete_runtime(self, runtime_name, memory):
-        logger.debug("I am about to delete lambda function: {}".format(runtime_name))
+        """
+        Deletes lambda runtime from its runtime name and memory
+        """
+        logger.debug('Deleting lambda runtime: {}'.format(runtime_name))
 
-        function_name, memory = self._check_params(runtime_name, memory)
+        function_name = self._format_action_name(runtime_name, memory)
         
         response = self.client.delete_function(
             FunctionName=function_name
@@ -264,7 +279,11 @@ class ComputeBackend:
             raise Exception(msg)
 
     def delete_all_runtimes(self):
-
+        """
+        Deletes all PyWren Lambda runtimes
+        """
+        logger.debug('Deleting all runtimes')
+        
         response = self.client.list_functions(
             MasterRegion=self.region
         )
@@ -276,8 +295,8 @@ class ComputeBackend:
 
     def list_runtimes(self, docker_image_name='all'):
         """
-        List all the runtimes deployed in the IBM CF service
-        return: list of tuples [docker_image_name, memory]
+        List all the lambda runtimes deployed.
+        return: Array of tuples (function_name, memory)
         """
         runtimes = []
         response = self.client.list_functions(
@@ -287,11 +306,14 @@ class ComputeBackend:
         for runtime in response['Functions']:
             function_name = runtime['FunctionName']
             memory = runtime['MemorySize']
-            runtimes.append([function_name, memory])
+            runtimes.append((function_name, memory))
         return runtimes
 
     def create_layer(self, layer_name, runtime_name, zipfile):
-        logger.debug("I am about to create lambda layer: {}".format(layer_name))
+        """
+        Creates lambda layer from bin code
+        """
+        logger.debug("Creating lambda layer: {}".format(layer_name))
         response = self.client.publish_layer_version(
             LayerName=layer_name,
             Description=self.package,
@@ -309,7 +331,10 @@ class ComputeBackend:
             raise Exception(msg)
     
     def delete_layer(self, layer_arn, version_number=None):
-        logger.debug("I am about to delete lambda layer: {}".format(layer_arn))
+        """
+        Deletes lambda layer from its arn
+        """
+        logger.debug("Deleting lambda layer: {}".format(layer_arn))
 
         if version_number is None:
             version_number = layer_arn.split(':')[-1]
@@ -319,10 +344,18 @@ class ComputeBackend:
             VersionNumber=version_number
         )
 
-        print(response)
+        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+            logger.debug("OK --> Layer {} deleted".format(layer_arn))
+            return response['LayerVersionArn']
+        else:
+            msg = 'An error occurred deleting layer {}: {}'.format(layer_arn, response)
+            raise Exception(msg)
 
     def list_layers(self, runtime_name=None):
-        logger.debug("I am about to list lambda layers: {}".format(runtime_name))
+        """
+        Gets all Lambda Layers available for the Python runtime selected
+        """
+        logger.debug("Listing lambda layers: {}".format(runtime_name))
         response = self.client.list_layers(
             CompatibleRuntime=runtime_name
         )
@@ -336,7 +369,7 @@ class ComputeBackend:
         exec_id = payload['executor_id']
         call_id = payload['call_id']
 
-        function_name, _ = self._check_params(runtime_name, runtime_memory)
+        function_name = self._format_action_name(runtime_name, runtime_memory)
 
         start = time.time()
         try:
@@ -376,7 +409,7 @@ class ComputeBackend:
         """
         Invoke lambda function and wait for result
         """
-        function_name, _ = self._check_params(runtime_name, runtime_memory)
+        function_name = self._format_action_name(runtime_name, runtime_memory)
 
         response = self.client.invoke(
             FunctionName=function_name,
@@ -397,6 +430,10 @@ class ComputeBackend:
         return runtime_key
     
     def generate_runtime_meta(self, runtime_name):
+        """
+        Extract preinstalled Python modules from lambda function execution environment
+        return : runtime meta dictionary
+        """
         module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
         meta_action_location = os.path.join(module_location, 'compute', 'backends', 'aws_lambda', 'extract_preinstalls_fn.py')
         modules_zip_action = os.path.join(module_location, 'extract_modules.zip')
@@ -424,4 +461,3 @@ class ComputeBackend:
             raise Exception(runtime_meta)
 
         return runtime_meta
-
