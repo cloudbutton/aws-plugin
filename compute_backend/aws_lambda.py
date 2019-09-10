@@ -9,6 +9,7 @@ import zipfile
 import sys
 import pip
 import tempfile
+import textwrap
 import pywren_ibm_cloud
 from pywren_ibm_cloud.version import __version__
 from pywren_ibm_cloud.storage.storage import LOCAL_HOME_DIR
@@ -16,7 +17,7 @@ from pywren_ibm_cloud.storage.storage import LOCAL_HOME_DIR
 logger = logging.getLogger(__name__)
 
 
-class ComputeBackend:
+class AWSLambdaComputeBackend:
     """
     A wrap-up around AWS Boto3 Lambda API
     """
@@ -435,18 +436,31 @@ class ComputeBackend:
         Extract preinstalled Python modules from lambda function execution environment
         return : runtime meta dictionary
         """
-        module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
-        meta_action_location = os.path.join(module_location, 'compute', 'backends', 'aws_lambda', 'extract_preinstalls_fn.py')
-        modules_zip_action = os.path.join(module_location, 'extract_modules.zip')
+        action_code = """
+        import sys
+        import pkgutil
 
+        def main(event, context):
+            runtime_meta = dict()
+            mods = list(pkgutil.iter_modules())
+            runtime_meta['preinstalls'] = [entry for entry in sorted([[mod, is_pkg] for _, mod, is_pkg in mods])]
+            python_version = sys.version_info
+            runtime_meta['python_ver'] = str(python_version[0])+"."+str(python_version[1])
+            return runtime_meta
+        """
+        action_location = os.path.join(tempfile.gettempdir(), 'extract_preinstalls_aws.py')
+        with open(action_location, 'w') as f:
+            f.write(textwrap.dedent(action_code))
+        
+        modules_zip_action = os.path.join(tempfile.gettempdir(), 'extract_preinstalls_aws.zip')
         with zipfile.ZipFile(modules_zip_action, 'w') as extract_modules_zip:
-            extract_modules_zip.write(meta_action_location, '__main__.py')
+            extract_modules_zip.write(action_location, '__main__.py')
             extract_modules_zip.close()
         with open(modules_zip_action, 'rb') as modules_zip:
-            action_code = modules_zip.read()
+            action_bytes = modules_zip.read()
 
         memory = 192
-        self.create_runtime(runtime_name, memory, code=action_code)
+        self.create_runtime(runtime_name, memory, code=action_bytes)
         logger.debug("Extracting Python modules list from: {}".format(runtime_name))
 
         try:
