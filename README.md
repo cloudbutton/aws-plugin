@@ -30,6 +30,7 @@ aws:
 
 aws_lambda:
     execution_role : <EXECUTION_ROLE_ARN>
+    #region_name : <REGION_NAME> # Optional, overrides 'compute_backend_region'
 
 aws_s3:
     endpoint : <S3_ENDPOINT_URI>
@@ -39,6 +40,7 @@ aws_s3:
  - `compute_backend_region`: Region where the S3 bucket is located and where Lambda functions will be invoked (e.g. `us-east-1`).
  - `execution_role`: ARN of the execution role created at step 2. You can find it in the Role page at the *Roles* list in the *IAM* section (e.g. `arn:aws:iam::1234567890:role/cloudbutton-role`).
 - `endpoint`: Endpoint URL of the bucket created at step 6 (e.g. `https://s3.us-east-1.amazonaws.com`)
+- `region_name` : Region where Lambda functions are deployed (overrides `compute_backend_region` from `pywren` entry).
 
 ### Usage
 

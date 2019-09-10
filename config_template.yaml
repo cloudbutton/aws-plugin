@@ -3,6 +3,7 @@ pywren:
     #storage_prefix: pywren.jobs
     storage_backend: aws_s3
     compute_backend: aws_lambda
+    compute_backend_region : <REGION_NAME>
     #data_cleaner: <True/False>
     #runtime :
     #runtime_timeout: 600000     # Default timeout
@@ -16,7 +17,7 @@ aws:
     secret_access_key : <SECRET_ACCESS_KEY>
 
 aws_lambda:
-    region_name : <REGION_NAME>
+    #region_name : <REGION_NAME> # Optional, overrides 'compute_backend_region' from 'pywren' entry
     execution_role : <EXECUTION_ROLE_ARN>
 
 aws_s3:
