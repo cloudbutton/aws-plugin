@@ -32,5 +32,5 @@ def load_config(config_data=None):
     if 'execution_role' not in config_data['aws_lambda']:
         raise Exception("execution_role' are mandatory under 'aws_lambda' section")
     
-    config_data['aws_lambda']['region'] = config_data['pywren']['compute_backend_region']
-    
+    if 'region' not in config_data['aws_lambda']:
+        config_data['aws_lambda']['region'] = config_data['pywren']['compute_backend_region']    

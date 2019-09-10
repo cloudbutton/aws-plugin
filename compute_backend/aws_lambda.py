@@ -17,7 +17,7 @@ from pywren_ibm_cloud.storage.storage import LOCAL_HOME_DIR
 logger = logging.getLogger(__name__)
 
 
-class AWSLambdaComputeBackend:
+class AWSLambdaBackend:
     """
     A wrap-up around AWS Boto3 Lambda API
     """
@@ -123,10 +123,10 @@ class AWSLambdaComputeBackend:
         dependencies.insert(0, 'install')
         dependencies += ['-t', install_path, '--system']
         dependencies = list(filter(lambda x : x.rstrip(), dependencies))
-        old_stdout = sys.stdout     # Disable stdout
-        sys.stdout = open(os.devnull, 'w')
+        # old_stdout = sys.stdout     # Disable stdout
+        # sys.stdout = open(os.devnull, 'w')
         pip.main(dependencies)
-        sys.stdout = old_stdout
+        # sys.stdout = old_stdout
 
         # Compress modules
         with zipfile.ZipFile(zip_path, 'w') as layer_zip:

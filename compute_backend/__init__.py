@@ -1,1 +1,1 @@
-from .aws_lambda import ComputeBackend
+from .aws_lambda import AWSLambdaBackend as ComputeBackend
