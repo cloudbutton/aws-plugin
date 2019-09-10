@@ -27,7 +27,7 @@ logging.getLogger('urllib3').setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
-class StorageBackend:
+class S3Backend:
     def __init__(self, s3_config):
         service_endpoint = s3_config.get('endpoint').replace('http:', 'https:')
 
