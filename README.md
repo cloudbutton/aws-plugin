@@ -21,26 +21,22 @@ Cloudbutton toolkit plugin for Amazon Lambda and Amazon S3
 Copy the following lines and paste them to the local configuration file located in your home directory called `.pywren_config`
 
 ```yaml
-pywren:
-    [...]
-    compute_backend_region : <REGION_NAME>
 aws:
     access_key_id : <ACCESS_KEY_ID>
     secret_access_key : <SECRET_ACCESS_KEY>
 
 aws_lambda:
     execution_role : <EXECUTION_ROLE_ARN>
-    #region_name : <REGION_NAME> # Optional, overrides 'compute_backend_region'
+    region_name : <REGION_NAME>
 
 aws_s3:
     endpoint : <S3_ENDPOINT_URI>
 ```
 
  - `access_key_id` and `secret_access_key`: Keys to access to all AWS services from your account. To find them, navigate to *My Security Credentials* and click *Create Access Key* if you don't already have one.
- - `compute_backend_region`: Region where the S3 bucket is located and where Lambda functions will be invoked (e.g. `us-east-1`).
+ - `region_name`: Region where the S3 bucket is located and where Lambda functions will be invoked (e.g. `us-east-1`).
  - `execution_role`: ARN of the execution role created at step 2. You can find it in the Role page at the *Roles* list in the *IAM* section (e.g. `arn:aws:iam::1234567890:role/cloudbutton-role`).
 - `endpoint`: Endpoint URL of the bucket created at step 6 (e.g. `https://s3.us-east-1.amazonaws.com`)
-- `region_name` : Region where Lambda functions are deployed (overrides `compute_backend_region` from `pywren` entry).
 
 ### Usage
 

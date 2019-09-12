@@ -8,11 +8,11 @@ RUNTIME_MEMORY_MAX = 3008  # Max. memory: 3008 MB
 def load_config(config_data=None):
     if 'runtime_memory' not in config_data['pywren']:
         config_data['pywren']['runtime_memory'] = RUNTIME_MEMORY_DEFAULT
-    if config_data['pywren']['runtime_memory'] > RUNTIME_MEMORY_MAX:
-        config_data['pywren']['runtime_memory'] = RUNTIME_MEMORY_MAX
     if config_data['pywren']['runtime_memory'] % 64 != 0:   # Adjust 64 MB memory increments restriction
         mem = config_data['pywren']['runtime_memory']
         config_data['pywren']['runtime_memory'] = (mem + (64 - (mem % 64)))
+    if config_data['pywren']['runtime_memory'] > RUNTIME_MEMORY_MAX:
+        config_data['pywren']['runtime_memory'] = RUNTIME_MEMORY_MAX
     if 'runtime_timeout' not in config_data['pywren'] or \
         config_data['pywren']['runtime_timeout'] > RUNTIME_TIMEOUT_DEFAULT:
         config_data['pywren']['runtime_timeout'] = RUNTIME_TIMEOUT_DEFAULT
@@ -32,5 +32,8 @@ def load_config(config_data=None):
     if 'execution_role' not in config_data['aws_lambda']:
         raise Exception("execution_role' are mandatory under 'aws_lambda' section")
     
-    if 'region' not in config_data['aws_lambda']:
-        config_data['aws_lambda']['region'] = config_data['pywren']['compute_backend_region']    
+    if 'region_name' not in config_data['aws_lambda']:
+        config_data['aws_lambda']['region'] = config_data['pywren']['compute_backend_region']
+    else:
+        config_data['aws_lambda']['region'] = config_data['aws']['region_name']
+        del config_data['aws_lambda']['region_name']

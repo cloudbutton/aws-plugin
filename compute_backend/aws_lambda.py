@@ -72,6 +72,7 @@ class AWSLambdaBackend:
         Retruns arn for the existing numerics lambda layer basen on region
         return : layer arn
         """
+        # TODO complete list with all regions
         acc_id = {
             'us-east-1' : 668099181075,
             'us-east-2' : 259788987135,
