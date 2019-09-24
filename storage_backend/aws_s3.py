@@ -19,7 +19,7 @@ import boto3
 import botocore
 from datetime import datetime
 from ...utils import StorageNoSuchKeyError
-from ....utils import sizeof_fmt, is_cf_cluster
+from ....utils import sizeof_fmt
 
 logging.getLogger('boto3').setLevel(logging.CRITICAL)
 logging.getLogger('botocore').setLevel(logging.CRITICAL)

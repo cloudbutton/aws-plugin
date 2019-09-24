@@ -1,9 +1,15 @@
 import sys
+import tempfile
+import os
 from pywren_ibm_cloud.utils import version_str
 
 RUNTIME_TIMEOUT_DEFAULT = 900  # Default timeout: 900 s == 15 min
 RUNTIME_MEMORY_DEFAULT = 256  # Default memory: 256 MB
 RUNTIME_MEMORY_MAX = 3008  # Max. memory: 3008 MB
+
+LAYER_DIR_PATH = os.path.join(tempfile.gettempdir(), 'modules', 'python')
+LAYER_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'pywren_dependencies.zip')
+ACTION_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'cloudbutton_aws_lambda.zip')
 
 def load_config(config_data=None):
     if 'runtime_memory' not in config_data['pywren']:
@@ -30,10 +36,10 @@ def load_config(config_data=None):
         raise Exception("'access_key_id' and 'secret_access_key' are mandatory under 'aws' section")
 
     if 'execution_role' not in config_data['aws_lambda']:
-        raise Exception("execution_role' are mandatory under 'aws_lambda' section")
+        raise Exception("'execution_role' is mandatory under 'aws_lambda' section")
     
-    if 'region_name' not in config_data['aws_lambda']:
-        config_data['aws_lambda']['region'] = config_data['pywren']['compute_backend_region']
+    if 'compute_backend_region' not in config_data['pywren'] \
+        and 'region_name' not in config_data['aws_lambda']:
+        raise Exception("'compute_backend_region' or 'region_name' not specified")
     else:
-        config_data['aws_lambda']['region'] = config_data['aws']['region_name']
-        del config_data['aws_lambda']['region_name']
+        config_data['aws_lambda']['region'] = config_data['aws_lambda']['region_name']
