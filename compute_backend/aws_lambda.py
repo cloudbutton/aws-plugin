@@ -7,7 +7,7 @@ import time
 import json
 import zipfile
 import sys
-import pip
+import subprocess
 import tempfile
 import textwrap
 import pywren_ibm_cloud
@@ -120,11 +120,11 @@ class AWSLambdaBackend:
         
         # Install modules
         dependencies.insert(0, 'install')
-        dependencies += ['-t', aws_lambda_config.LAYER_DIR_PATH, '--system']
+        dependencies += ['-t', aws_lambda_config.LAYER_DIR_PATH]
         dependencies = list(filter(lambda x : x.rstrip(), dependencies))
         # old_stdout = sys.stdout     # Disable stdout
         # sys.stdout = open(os.devnull, 'w')
-        pip.main(dependencies)
+        subprocess.check_call([sys.executable, '-m', 'pip'] + dependencies)
         # sys.stdout = old_stdout
 
         # Compress modules
