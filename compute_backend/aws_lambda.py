@@ -7,12 +7,12 @@ import time
 import json
 import zipfile
 import sys
-import pip
+import subprocess
 import tempfile
 import textwrap
 import pywren_ibm_cloud
+from . import config as aws_lambda_config
 from pywren_ibm_cloud.version import __version__
-from pywren_ibm_cloud.storage.storage import LOCAL_HOME_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +103,12 @@ class AWSLambdaBackend:
                     add_folder_to_zip(zip_file, full_path, os.path.join(sub_dir, file))
 
         # Path where modules will be downloaded
-        zip_path = os.path.join(tempfile.gettempdir(), 'pywren_dependencies.zip')
-        install_path = os.path.join(tempfile.gettempdir(), 'modules', 'python')
-        if os.path.exists(install_path) and os.path.isdir(install_path):
-            shutil.rmtree(install_path)
-        elif os.path.exists(install_path) and os.path.isfile(install_path):
-            os.remove(install_path)
+        if os.path.exists(aws_lambda_config.LAYER_DIR_PATH) and os.path.isdir(aws_lambda_config.LAYER_DIR_PATH):
+            shutil.rmtree(aws_lambda_config.LAYER_DIR_PATH)
+        elif os.path.exists(aws_lambda_config.LAYER_DIR_PATH) and os.path.isfile(aws_lambda_config.LAYER_DIR_PATH):
+            os.remove(aws_lambda_config.LAYER_DIR_PATH)
+        if not (os.path.isdir(aws_lambda_config.LAYER_DIR_PATH)):
+            os.makedirs(aws_lambda_config.LAYER_DIR_PATH)
         
         # Get modules name & version from requirements.txt
         base_path = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
@@ -117,24 +117,22 @@ class AWSLambdaBackend:
 
         with open(requirements_path, 'r') as requirements_file:
             dependencies = requirements_file.readlines()
-        if not (os.path.isdir(install_path)):
-            os.makedirs(install_path)
         
         # Install modules
         dependencies.insert(0, 'install')
-        dependencies += ['-t', install_path, '--system']
+        dependencies += ['-t', aws_lambda_config.LAYER_DIR_PATH]
         dependencies = list(filter(lambda x : x.rstrip(), dependencies))
         # old_stdout = sys.stdout     # Disable stdout
         # sys.stdout = open(os.devnull, 'w')
-        pip.main(dependencies)
+        subprocess.check_call([sys.executable, '-m', 'pip'] + dependencies)
         # sys.stdout = old_stdout
 
         # Compress modules
-        with zipfile.ZipFile(zip_path, 'w') as layer_zip:
+        with zipfile.ZipFile(aws_lambda_config.LAYER_ZIP_PATH, 'w') as layer_zip:
             add_folder_to_zip(layer_zip, os.path.join(tempfile.gettempdir(), 'modules'))
 
         # Read zip as bytes
-        with open(zip_path, 'rb') as layer_zip:
+        with open(aws_lambda_config.LAYER_ZIP_PATH, 'rb') as layer_zip:
             layer_bytes = layer_zip.read()
         
         return layer_bytes
@@ -163,8 +161,7 @@ class AWSLambdaBackend:
         Creates PyWren handler zip
         return : zip binary
         """
-        zip_location = os.path.join(tempfile.gettempdir(), 'cloudbutton_aws_lambda.zip')
-        logger.debug("Creating function handler zip in {}".format(zip_location))
+        logger.debug("Creating function handler zip in {}".format(aws_lambda_config.ACTION_ZIP_PATH))
 
         def add_folder_to_zip(zip_file, full_dir_path, sub_dir=''):
             for file in os.listdir(full_dir_path):
@@ -175,17 +172,17 @@ class AWSLambdaBackend:
                     add_folder_to_zip(zip_file, full_path, os.path.join(sub_dir, file))
 
         try:
-            with zipfile.ZipFile(zip_location, 'w') as ibmcf_pywren_zip:
+            with zipfile.ZipFile(aws_lambda_config.ACTION_ZIP_PATH, 'w') as ibmcf_pywren_zip:
                 current_location = os.path.dirname(os.path.abspath(__file__))
                 module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
                 main_file = os.path.join(current_location, 'entry_point.py')
                 ibmcf_pywren_zip.write(main_file, '__main__.py', zipfile.ZIP_DEFLATED)
                 add_folder_to_zip(ibmcf_pywren_zip, module_location)
 
-            with open(zip_location, "rb") as action_zip:
+            with open(aws_lambda_config.ACTION_ZIP_PATH, "rb") as action_zip:
                 action_bin = action_zip.read()
         except Exception as e:
-            raise Exception('Unable to create the {} package: {}'.format(zip_location, e))
+            raise Exception('Unable to create the {} package: {}'.format(aws_lambda_config.ACTION_ZIP_PATH, e))
         return action_bin
         
     
@@ -236,6 +233,8 @@ class AWSLambdaBackend:
 
         layers = self._setup_layers(runtime_name)
 
+        runtime_meta = self._generate_runtime_meta(runtime_name)
+
         if code is None:
             code = self._create_handler_bin()
 
@@ -262,6 +261,8 @@ class AWSLambdaBackend:
         except self.client.exceptions.ResourceConflictException:
             logger.debug('{} lambda function already exists. It will be replaced.')
             self.update_runtime(runtime_name, code, memory, timeout)
+        
+        return runtime_meta
 
     def delete_runtime(self, runtime_name, memory):
         """
@@ -432,7 +433,7 @@ class AWSLambdaBackend:
 
         return runtime_key
     
-    def generate_runtime_meta(self, runtime_name):
+    def _generate_runtime_meta(self, runtime_name):
         """
         Extract preinstalled Python modules from lambda function execution environment
         return : runtime meta dictionary
@@ -461,17 +462,32 @@ class AWSLambdaBackend:
             action_bytes = modules_zip.read()
 
         memory = 192
-        self.create_runtime(runtime_name, memory, code=action_bytes)
+        try:
+            self.client.create_function(
+                    FunctionName=self._format_action_name(runtime_name, memory),
+                    Runtime=runtime_name,
+                    Role=self.role,
+                    Handler='__main__.main',
+                    Code={
+                        'ZipFile': action_bytes
+                    },
+                    Description=self.package,
+                    Timeout=aws_lambda_config.RUNTIME_TIMEOUT_DEFAULT,
+                    MemorySize=memory
+                )
+        except Exception as e:
+            raise Exception("Unable to deploy 'modules' action: {}".format(e))
+        
         logger.debug("Extracting Python modules list from: {}".format(runtime_name))
 
         try:
             runtime_meta = self.invoke_with_result(runtime_name, memory)
         except Exception:
-            raise("Unable to invoke 'modules' action")
+            raise Exception("Unable to invoke 'modules' action")
         try:
             self.delete_runtime(runtime_name, memory)
         except Exception:
-            raise("Unable to delete 'modules' action")
+            raise Exception("Unable to delete 'modules' action")
 
         if 'preinstalls' not in runtime_meta:
             raise Exception(runtime_meta)
