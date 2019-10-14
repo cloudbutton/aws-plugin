@@ -119,12 +119,11 @@ class AWSLambdaBackend:
             dependencies = requirements_file.readlines()
         
         # Install modules
-        dependencies.insert(0, 'install')
-        dependencies += ['-t', aws_lambda_config.LAYER_DIR_PATH]
         dependencies = list(filter(lambda x : x.rstrip(), dependencies))
+        dependencies = list(map(lambda x : x.replace('\n', ''), dependencies))
         # old_stdout = sys.stdout     # Disable stdout
         # sys.stdout = open(os.devnull, 'w')
-        subprocess.check_call([sys.executable, '-m', 'pip'] + dependencies)
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-t', aws_lambda_config.LAYER_DIR_PATH, '--system'] + dependencies)
         # sys.stdout = old_stdout
 
         # Compress modules
