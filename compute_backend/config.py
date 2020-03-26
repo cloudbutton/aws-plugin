@@ -7,6 +7,8 @@ RUNTIME_TIMEOUT_DEFAULT = 900  # Default timeout: 900 s == 15 min
 RUNTIME_MEMORY_DEFAULT = 256  # Default memory: 256 MB
 RUNTIME_MEMORY_MAX = 3008  # Max. memory: 3008 MB
 
+MAX_CONCURRENT_WORKERS = 1000
+
 LAYER_DIR_PATH = os.path.join(tempfile.gettempdir(), 'modules', 'python')
 LAYER_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'pywren_dependencies.zip')
 ACTION_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'cloudbutton_aws_lambda.zip')
@@ -24,6 +26,8 @@ def load_config(config_data=None):
         config_data['pywren']['runtime_timeout'] = RUNTIME_TIMEOUT_DEFAULT
     if 'runtime' not in config_data['pywren']:
         config_data['pywren']['runtime'] = 'python'+version_str(sys.version_info)
+    if 'workers' not in config_data['pywren']:
+        config_data['pywren']['workers'] = MAX_CONCURRENT_WORKERS
 
     if 'aws' not in config_data and 'aws_lambda' not in config_data:
         raise Exception("'aws' and 'aws_lambda' sections are mandatory in the configuration")
