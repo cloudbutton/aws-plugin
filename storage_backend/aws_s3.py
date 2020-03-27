@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class S3Backend:
-    def __init__(self, s3_config):
+    def __init__(self, s3_config, bucket=None, executor_id=None):
         service_endpoint = s3_config.get('endpoint').replace('http:', 'https:')
 
         logger.debug("Set AWS S3 Endpoint to {}".format(service_endpoint))

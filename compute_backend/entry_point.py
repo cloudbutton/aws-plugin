@@ -16,7 +16,7 @@
 
 import logging
 from pywren_ibm_cloud.config import cloud_logging_config
-from pywren_ibm_cloud.runtime.function_handler.handler import function_handler
+from pywren_ibm_cloud.function.handler import function_handler
 
 cloud_logging_config(logging.INFO)
 logger = logging.getLogger('__main__')
@@ -26,3 +26,4 @@ def main(event, context):
     logger.info("Starting AWS Lambda Function execution")
     function_handler(event)
     return {"Execution": "Finished"}
+
