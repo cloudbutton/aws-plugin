@@ -2,7 +2,7 @@ import os
 import shutil
 import logging
 import boto3
-import botocore
+import botocore.session
 import time
 import json
 import zipfile
@@ -31,12 +31,10 @@ class AWSLambdaBackend:
         self.role = aws_lambda_config['execution_role']
         self.layer_key = self.package.replace('.', '-')+'_dependencies'
 
-        self.lambda_client = self.client = boto3.client(
-            'lambda',
-            aws_access_key_id=aws_lambda_config['access_key_id'],
-            aws_secret_access_key=aws_lambda_config['secret_access_key'],
-            region_name=self.region
-        )
+        self.session = boto3.Session(aws_access_key_id=aws_lambda_config['access_key_id'],
+                                     aws_secret_access_key=aws_lambda_config['secret_access_key'],
+                                     region_name=self.region)
+        self.client = self.session.client('lambda', region_name=self.region)
 
         log_msg = 'PyWren v{} init for AWS Lambda - Region: {}'.format(__version__, self.region)
         logger.info(log_msg)
