@@ -1,9 +1,8 @@
-
 # Cloud Button AWS Lambda Plugin
 Cloudbutton toolkit plugin for Amazon Lambda and Amazon S3
 
 - CloudButton Project: [http://cloudbutton.eu/](http://cloudbutton.eu/)
-- CloudButton Toolkit: [https://github.com/pywren/pywren-ibm-cloud](https://github.com/pywren/pywren-ibm-cloud)
+- CloudButton Toolkit Github: [https://github.com/cloudbutton/cloudbutton](https://github.com/cloudbutton/cloudbutton)
 
 ### AWS Account Setup
 
@@ -18,7 +17,7 @@ Cloudbutton toolkit plugin for Amazon Lambda and Amazon S3
 
 ### Local Configuration
 
-Copy the following lines and paste them to the local configuration file located in your home directory called `.pywren_config`
+Copy the following lines and paste them to the local configuration file located in your home directory called `.cloudbutton_config`
 
 ```yaml
 aws:

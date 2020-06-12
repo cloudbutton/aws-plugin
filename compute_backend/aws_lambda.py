@@ -10,9 +10,8 @@ import sys
 import subprocess
 import tempfile
 import textwrap
-import pywren_ibm_cloud
+import cloudbutton
 from . import config as aws_lambda_config
-from pywren_ibm_cloud.version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +22,10 @@ class AWSLambdaBackend:
     """
 
     def __init__(self, aws_lambda_config):
-        self.log_level = os.getenv('PYWREN_LOG_LEVEL')
+        self.log_level = os.getenv('CLOUDBUTTON_LOGLEVEL')
         self.name = 'aws_lambda'
         self.aws_lambda_config = aws_lambda_config
-        self.package = 'pywren_v'+__version__
+        self.package = 'cloudbutton_v'+cloudbutton.__version__
         self.region = aws_lambda_config['region']
         self.role = aws_lambda_config['execution_role']
         self.layer_key = self.package.replace('.', '-')+'_dependencies'
@@ -36,7 +35,7 @@ class AWSLambdaBackend:
                                      region_name=self.region)
         self.client = self.session.client('lambda', region_name=self.region)
 
-        log_msg = 'PyWren v{} init for AWS Lambda - Region: {}'.format(__version__, self.region)
+        log_msg = 'Cloudbutton v{} init for AWS Lambda - Region: {}'.format(cloudbutton.__version__, self.region)
         logger.info(log_msg)
         if not self.log_level:
             print(log_msg)
@@ -53,7 +52,7 @@ class AWSLambdaBackend:
         
     def _check_dependencies_layer(self, runtime_name):
         """
-        Checks if PyWren dependencies layer is already deployed
+        Checks if Cloudbutton dependencies layer is already deployed
         returns : arn if deployed, else None
         """
         layers = self.list_layers(runtime_name)
@@ -89,7 +88,7 @@ class AWSLambdaBackend:
     
     def _build_dependencies_layer(self):
         """
-        Downloads and builds module dependencies for PyWren lambda execution
+        Downloads and builds module dependencies for Cloudbutton lambda execution
         return : layer zip bytes
         """
         def add_folder_to_zip(zip_file, full_dir_path, sub_dir=''):
@@ -109,8 +108,8 @@ class AWSLambdaBackend:
             os.makedirs(aws_lambda_config.LAYER_DIR_PATH)
         
         # Get modules name & version from requirements.txt
-        base_path = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
-        requirements_path = os.path.join(base_path, 'compute', 'backends', 'aws_lambda', 'requirements.txt')
+        base_path = os.path.dirname(os.path.abspath(cloudbutton.__file__))
+        requirements_path = os.path.join(base_path, 'engine', 'backends', 'compute', 'aws_lambda', 'requirements.txt')
         dependencies = []
 
         with open(requirements_path, 'r') as requirements_file:
@@ -136,7 +135,7 @@ class AWSLambdaBackend:
     
     def _setup_layers(self, runtime_name):
         """
-        Setups and creates lambda layers for PyWren function execution
+        Setups and creates lambda layers for Cloudbutton function execution
         """
         layers_arn = []
         dependencies_layer = self._check_dependencies_layer(runtime_name)
@@ -155,7 +154,7 @@ class AWSLambdaBackend:
 
     def _create_handler_bin(self):
         """
-        Creates PyWren handler zip
+        Creates Cloudbutton handler zip
         return : zip binary
         """
         logger.debug("Creating function handler zip in {}".format(aws_lambda_config.ACTION_ZIP_PATH))
@@ -164,17 +163,17 @@ class AWSLambdaBackend:
             for file in os.listdir(full_dir_path):
                 full_path = os.path.join(full_dir_path, file)
                 if os.path.isfile(full_path):
-                    zip_file.write(full_path, os.path.join('pywren_ibm_cloud', sub_dir, file), zipfile.ZIP_DEFLATED)
+                    zip_file.write(full_path, os.path.join('cloudbutton', sub_dir, file), zipfile.ZIP_DEFLATED)
                 elif os.path.isdir(full_path) and '__pycache__' not in full_path:
                     add_folder_to_zip(zip_file, full_path, os.path.join(sub_dir, file))
 
         try:
-            with zipfile.ZipFile(aws_lambda_config.ACTION_ZIP_PATH, 'w') as ibmcf_pywren_zip:
+            with zipfile.ZipFile(aws_lambda_config.ACTION_ZIP_PATH, 'w') as cloudbutton_zip:
                 current_location = os.path.dirname(os.path.abspath(__file__))
-                module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
+                module_location = os.path.dirname(os.path.abspath(cloudbutton.__file__))
                 main_file = os.path.join(current_location, 'entry_point.py')
-                ibmcf_pywren_zip.write(main_file, '__main__.py', zipfile.ZIP_DEFLATED)
-                add_folder_to_zip(ibmcf_pywren_zip, module_location)
+                cloudbutton_zip.write(main_file, '__main__.py', zipfile.ZIP_DEFLATED)
+                add_folder_to_zip(cloudbutton_zip, module_location)
 
             with open(aws_lambda_config.ACTION_ZIP_PATH, "rb") as action_zip:
                 action_bin = action_zip.read()
@@ -281,7 +280,7 @@ class AWSLambdaBackend:
 
     def delete_all_runtimes(self):
         """
-        Deletes all PyWren Lambda runtimes
+        Deletes all Cloudbutton Lambda runtimes
         """
         logger.debug('Deleting all runtimes')
         
@@ -290,7 +289,7 @@ class AWSLambdaBackend:
         )
 
         for runtime in response['Functions']:
-            if 'pywren_v' in runtime['FunctionName']:
+            if 'cloudbutton_v' in runtime['FunctionName']:
                 runtime_name, runtime_memory = self._unformat_action_name(runtime['FunctionName'])
                 self.delete_runtime(runtime_name, runtime_memory)
 
@@ -399,7 +398,7 @@ class AWSLambdaBackend:
             if response['ResponseMetadata']['HTTPStatusCode'] == 401:
                 raise Exception('Unauthorized - Invalid API Key')
             elif response['ResponseMetadata']['HTTPStatusCode'] == 404:
-                raise Exception('PyWren Runtime: {} not deployed'.format(runtime_name))
+                raise Exception('Cloudbutton Runtime: {} not deployed'.format(runtime_name))
             elif response['ResponseMetadata']['HTTPStatusCode'] == 429:
                 # Too many concurrent requests in flight
                 return None

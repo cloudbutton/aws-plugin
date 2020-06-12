@@ -18,8 +18,7 @@ import logging
 import boto3
 import botocore
 from datetime import datetime
-from ...utils import StorageNoSuchKeyError
-from ....utils import sizeof_fmt
+from ..utils import StorageNoSuchKeyError
 
 logging.getLogger('boto3').setLevel(logging.CRITICAL)
 logging.getLogger('botocore').setLevel(logging.CRITICAL)
@@ -35,17 +34,15 @@ class S3Backend:
 
         logger.debug("AWS S3 using access_key_id and secret_access_key")
 
-        client_config = botocore.client.Config(
-            max_pool_connections=128,
-            user_agent_extra='pywren',
-            connect_timeout=1)
-        
-        self.s3_client = boto3.client(
-            's3',
-            aws_access_key_id=s3_config['access_key_id'],
-            aws_secret_access_key=s3_config['secret_access_key'],
-            config=client_config,
-            endpoint_url=service_endpoint)
+        client_config = botocore.client.Config(max_pool_connections=128,
+                                               user_agent_extra='cloudbutton',
+                                               connect_timeout=1)
+
+        self.s3_client = boto3.client('s3',
+                                      aws_access_key_id=s3_config['access_key_id'],
+                                      aws_secret_access_key=s3_config['secret_access_key'],
+                                      config=client_config,
+                                      endpoint_url=service_endpoint)
 
     def get_client(self):
         """
@@ -63,10 +60,12 @@ class S3Backend:
         :return: None
         """
         try:
-            res = self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=data)
+            res = self.s3_client.put_object(
+                Bucket=bucket_name, Key=key, Body=data)
             status = 'OK' if res['ResponseMetadata']['HTTPStatusCode'] == 200 else 'Error'
             try:
-                logger.debug('PUT Object {} - Size: {} - {}'.format(key, sizeof_fmt(len(data)), status))
+                logger.debug(
+                    'PUT Object {} - Size: {} - {}'.format(key, len(data), status))
             except Exception:
                 logger.debug('PUT Object {} {}'.format(key, status))
         except botocore.exceptions.ClientError as e:
@@ -83,7 +82,8 @@ class S3Backend:
         :rtype: str/bytes
         """
         try:
-            r = self.s3_client.get_object(Bucket=bucket_name, Key=key, **extra_get_args)
+            r = self.s3_client.get_object(
+                Bucket=bucket_name, Key=key, **extra_get_args)
             if stream:
                 data = r['Body']
             else:
@@ -129,10 +129,12 @@ class S3Backend:
         max_keys_num = 1000
         for i in range(0, len(key_list), max_keys_num):
             delete_keys = {'Objects': []}
-            delete_keys['Objects'] = [{'Key': k} for k in key_list[i:i+max_keys_num]]
-            result.append(self.s3_client.delete_objects(Bucket=bucket_name, Delete=delete_keys))
+            delete_keys['Objects'] = [{'Key': k}
+                                      for k in key_list[i:i+max_keys_num]]
+            result.append(self.s3_client.delete_objects(
+                Bucket=bucket_name, Delete=delete_keys))
         return result
-    
+
     def bucket_exists(self, bucket_name):
         """
         Head bucket from COS with a name. Throws StorageNoSuchKeyError if the given bucket does not exist.
@@ -172,7 +174,8 @@ class S3Backend:
         try:
             prefix = '' if prefix is None else prefix
             paginator = self.s3_client.get_paginator('list_objects_v2')
-            page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+            page_iterator = paginator.paginate(
+                Bucket=bucket_name, Prefix=prefix)
 
             object_list = []
             for page in page_iterator:
@@ -182,7 +185,8 @@ class S3Backend:
             return object_list
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == '404':
-                raise StorageNoSuchKeyError(bucket_name, '' if prefix is None else prefix)
+                raise StorageNoSuchKeyError(
+                    bucket_name, '' if prefix is None else prefix)
             else:
                 raise e
 
@@ -197,7 +201,8 @@ class S3Backend:
         try:
             prefix = '' if prefix is None else prefix
             paginator = self.s3_client.get_paginator('list_objects_v2')
-            page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+            page_iterator = paginator.paginate(
+                Bucket=bucket_name, Prefix=prefix)
 
             key_list = []
             for page in page_iterator:
