@@ -5,11 +5,10 @@ httplib2==0.18.0
 idna==2.8
 jmespath==0.9.4
 kafka-python==1.4.4
-lxml==4.3.1
-pika==0.13.0
+pika==0.13.1
 python-dateutil==2.8.0
 redis==2.10.6
-requests==2.21.0
+requests==2.22.0
 simplejson==3.16.0
 six==1.12.0
 urllib3==1.24.3
