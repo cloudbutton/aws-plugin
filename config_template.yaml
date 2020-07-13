@@ -1,16 +1,7 @@
-cloudbutton: 
+pywren: 
     storage_bucket: <BUCKET_NAME>
-    #storage_prefix: pywren.jobs
     storage_backend: aws_s3
     compute_backend: aws_lambda
-    #compute_backend_region : <REGION_NAME>
-    #data_cleaner: <True/False>
-    #runtime :
-    #runtime_timeout: 600000     # Default timeout
-    #runtime_memory: 256         # Default memory
-    #invocation_retry: <True/False>
-    #retry_sleeps: [1, 5, 10, 20, 30]
-    #retries: 5
 
 aws:
     access_key_id : <ACCESS_KEY_ID>
@@ -22,6 +13,3 @@ aws_lambda:
 
 aws_s3:
     endpoint : <S3_ENDPOINT_URI>
-
-#rabbitmq:
-    #amqp_url 	: <RABBIT_AMQP_URL>  # amqp://
