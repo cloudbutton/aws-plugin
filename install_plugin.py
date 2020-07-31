@@ -14,32 +14,33 @@
 # limitations under the License.
 #
 
-import cloudbutton
+import pywren_ibm_cloud
 import os
 import shutil
 
-base_path = os.path.dirname(cloudbutton.__file__)
-source_path = os.path.dirname(__file__)
 
-aws_functions_backend_path = os.path.join(os.path.join(base_path, 'engine', 'backends', 'compute'), 'aws_lambda')
-aws_storage_backend_path = os.path.join(os.path.join(base_path, 'engine', 'backends', 'storage'), 'aws_s3')
+pywren_path = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
 
-try:
-    if os.path.exists(aws_functions_backend_path) and os.path.isfile(aws_functions_backend_path):
-        os.remove(aws_functions_backend_path)
-    if os.path.exists(aws_storage_backend_path) and os.path.isfile(aws_storage_backend_path):
-        os.remove(aws_storage_backend_path)
+storage_backends_dir = os.path.dirname(os.path.abspath(pywren_ibm_cloud.storage.__file__))
+compute_backends_dir = os.path.dirname(os.path.abspath(pywren_ibm_cloud.compute.__file__))
+dst_storage_backend_path = os.path.join(storage_backends_dir, 'backends', 'aws_s3')
+dst_compute_backend_path = os.path.join(compute_backends_dir, 'backends', 'aws_lambda')
 
-    if os.path.exists(aws_functions_backend_path) and os.path.isdir(aws_functions_backend_path):
-        shutil.rmtree(aws_functions_backend_path)
-    if os.path.exists(aws_storage_backend_path) and os.path.isdir(aws_storage_backend_path):
-        shutil.rmtree(aws_storage_backend_path)
+if os.path.isdir(dst_storage_backend_path):
+    shutil.rmtree(dst_storage_backend_path)
+elif os.path.isfile(dst_storage_backend_path):
+    os.remove(dst_storage_backend_path)
 
-    if not os.path.exists(aws_functions_backend_path):
-        shutil.copytree(os.path.join(source_path, 'compute_backend'), aws_functions_backend_path)
-    if not os.path.exists(aws_storage_backend_path):
-        shutil.copytree(os.path.join(source_path, 'storage_backend'), aws_storage_backend_path)
+if os.path.isdir(dst_compute_backend_path):
+    shutil.rmtree(dst_compute_backend_path)
+elif os.path.isfile(dst_compute_backend_path):
+    os.remove(dst_compute_backend_path)
 
-    print('Done')
-except Exception as e:
-    print('Installation failed: {}'.format(e))
+current_location = os.path.dirname(os.path.abspath(__file__))
+src_storage_backend_path = os.path.join(current_location, 'aws_s3')
+src_compute_backend_path = os.path.join(current_location, 'aws_lambda')
+
+shutil.copytree(src_storage_backend_path, dst_storage_backend_path)
+shutil.copytree(src_compute_backend_path, dst_compute_backend_path)
+
+print('AWS plugin successfully installed in : {}'.format(pywren_path))
