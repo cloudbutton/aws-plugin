@@ -26,7 +26,7 @@ import sys
 import subprocess
 import tempfile
 import textwrap
-import cloudbutton
+import pywren_ibm_cloud
 from . import config as aws_lambda_config
 
 logger = logging.getLogger(__name__)
@@ -124,8 +124,8 @@ class AWSLambdaBackend:
             os.makedirs(aws_lambda_config.LAYER_DIR_PATH)
         
         # Get modules name & version from requirements.txt
-        base_path = os.path.dirname(os.path.abspath(cloudbutton.__file__))
-        requirements_path = os.path.join(base_path, 'engine', 'backends', 'compute', 'aws_lambda', 'requirements.txt')
+        base_path = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
+        requirements_path = os.path.join(base_path, 'compute', 'backends', 'aws_lambda', 'requirements.txt')
         dependencies = []
 
         with open(requirements_path, 'r') as requirements_file:
