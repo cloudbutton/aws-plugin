@@ -18,7 +18,6 @@ import os
 import shutil
 import logging
 import boto3
-import botocore.session
 import time
 import json
 import zipfile
@@ -27,6 +26,7 @@ import subprocess
 import tempfile
 import textwrap
 import pywren_ibm_cloud
+from pywren_ibm_cloud.compute.utils import create_function_handler_zip
 from . import config as aws_lambda_config
 
 logger = logging.getLogger(__name__)
@@ -38,10 +38,10 @@ class AWSLambdaBackend:
     """
 
     def __init__(self, aws_lambda_config):
-        self.log_level = os.getenv('CLOUDBUTTON_LOGLEVEL')
+        self.log_active = logger.getEffectiveLevel() != logging.WARNING
         self.name = 'aws_lambda'
         self.aws_lambda_config = aws_lambda_config
-        self.package = 'cloudbutton_v'+cloudbutton.__version__
+        self.package = 'pywren_v'+pywren_ibm_cloud.__version__
         self.region = aws_lambda_config['region']
         self.role = aws_lambda_config['execution_role']
         self.layer_key = self.package.replace('.', '-')+'_dependencies'
@@ -51,9 +51,9 @@ class AWSLambdaBackend:
                                      region_name=self.region)
         self.client = self.session.client('lambda', region_name=self.region)
 
-        log_msg = 'Cloudbutton v{} init for AWS Lambda - Region: {}'.format(cloudbutton.__version__, self.region)
+        log_msg = 'Pywren v{} init for AWS Lambda - Region: {}'.format(pywren_ibm_cloud.__version__, self.region)
         logger.info(log_msg)
-        if not self.log_level:
+        if not self.log_active:
             print(log_msg)
 
     def _format_action_name(self, runtime_name, runtime_memory):
@@ -166,37 +166,7 @@ class AWSLambdaBackend:
         
         layers_arn.append(dependencies_layer)
         layers_arn.append(self._get_scipy_layer_arn(runtime_name))
-        return layers_arn
-
-    def _create_handler_bin(self):
-        """
-        Creates Cloudbutton handler zip
-        return : zip binary
-        """
-        logger.debug("Creating function handler zip in {}".format(aws_lambda_config.ACTION_ZIP_PATH))
-
-        def add_folder_to_zip(zip_file, full_dir_path, sub_dir=''):
-            for file in os.listdir(full_dir_path):
-                full_path = os.path.join(full_dir_path, file)
-                if os.path.isfile(full_path):
-                    zip_file.write(full_path, os.path.join('cloudbutton', sub_dir, file), zipfile.ZIP_DEFLATED)
-                elif os.path.isdir(full_path) and '__pycache__' not in full_path:
-                    add_folder_to_zip(zip_file, full_path, os.path.join(sub_dir, file))
-
-        try:
-            with zipfile.ZipFile(aws_lambda_config.ACTION_ZIP_PATH, 'w') as cloudbutton_zip:
-                current_location = os.path.dirname(os.path.abspath(__file__))
-                module_location = os.path.dirname(os.path.abspath(cloudbutton.__file__))
-                main_file = os.path.join(current_location, 'entry_point.py')
-                cloudbutton_zip.write(main_file, '__main__.py', zipfile.ZIP_DEFLATED)
-                add_folder_to_zip(cloudbutton_zip, module_location)
-
-            with open(aws_lambda_config.ACTION_ZIP_PATH, "rb") as action_zip:
-                action_bin = action_zip.read()
-        except Exception as e:
-            raise Exception('Unable to create the {} package: {}'.format(aws_lambda_config.ACTION_ZIP_PATH, e))
-        return action_bin
-        
+        return layers_arn      
     
     def build_runtime(self):
         pass
@@ -248,7 +218,9 @@ class AWSLambdaBackend:
         runtime_meta = self._generate_runtime_meta(runtime_name)
 
         if code is None:
-            code = self._create_handler_bin()
+            create_function_handler_zip(aws_lambda_config.ACTION_ZIP_PATH, '__main__.py', __file__)
+            with open(aws_lambda_config.ACTION_ZIP_PATH, "rb") as action_zip:
+                code = action_zip.read()
 
         try:
             response = self.client.create_function(

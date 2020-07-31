@@ -17,7 +17,7 @@
 import sys
 import tempfile
 import os
-from cloudbutton.engine.utils import version_str
+from pywren_ibm_cloud.utils import version_str
 
 RUNTIME_TIMEOUT_DEFAULT = 900  # Default timeout: 900 s == 15 min
 RUNTIME_MEMORY_DEFAULT = 256  # Default memory: 256 MB
@@ -26,24 +26,24 @@ RUNTIME_MEMORY_MAX = 3008  # Max. memory: 3008 MB
 MAX_CONCURRENT_WORKERS = 1000
 
 LAYER_DIR_PATH = os.path.join(tempfile.gettempdir(), 'modules', 'python')
-LAYER_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'cloudbutton_dependencies.zip')
-ACTION_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'cloudbutton_aws_lambda.zip')
+LAYER_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'pywren_dependencies.zip')
+ACTION_ZIP_PATH = os.path.join(tempfile.gettempdir(), 'pywren_aws_lambda.zip')
 
 def load_config(config_data=None):
-    if 'runtime_memory' not in config_data['cloudbutton']:
-        config_data['cloudbutton']['runtime_memory'] = RUNTIME_MEMORY_DEFAULT
-    if config_data['cloudbutton']['runtime_memory'] % 64 != 0:   # Adjust 64 MB memory increments restriction
-        mem = config_data['cloudbutton']['runtime_memory']
-        config_data['cloudbutton']['runtime_memory'] = (mem + (64 - (mem % 64)))
-    if config_data['cloudbutton']['runtime_memory'] > RUNTIME_MEMORY_MAX:
-        config_data['cloudbutton']['runtime_memory'] = RUNTIME_MEMORY_MAX
-    if 'runtime_timeout' not in config_data['cloudbutton'] or \
-        config_data['cloudbutton']['runtime_timeout'] > RUNTIME_TIMEOUT_DEFAULT:
-        config_data['cloudbutton']['runtime_timeout'] = RUNTIME_TIMEOUT_DEFAULT
-    if 'runtime' not in config_data['cloudbutton']:
-        config_data['cloudbutton']['runtime'] = 'python'+version_str(sys.version_info)
-    if 'workers' not in config_data['cloudbutton']:
-        config_data['cloudbutton']['workers'] = MAX_CONCURRENT_WORKERS
+    if 'runtime_memory' not in config_data['pywren']:
+        config_data['pywren']['runtime_memory'] = RUNTIME_MEMORY_DEFAULT
+    if config_data['pywren']['runtime_memory'] % 64 != 0:   # Adjust 64 MB memory increments restriction
+        mem = config_data['pywren']['runtime_memory']
+        config_data['pywren']['runtime_memory'] = (mem + (64 - (mem % 64)))
+    if config_data['pywren']['runtime_memory'] > RUNTIME_MEMORY_MAX:
+        config_data['pywren']['runtime_memory'] = RUNTIME_MEMORY_MAX
+    if 'runtime_timeout' not in config_data['pywren'] or \
+        config_data['pywren']['runtime_timeout'] > RUNTIME_TIMEOUT_DEFAULT:
+        config_data['pywren']['runtime_timeout'] = RUNTIME_TIMEOUT_DEFAULT
+    if 'runtime' not in config_data['pywren']:
+        config_data['pywren']['runtime'] = 'python'+version_str(sys.version_info)
+    if 'workers' not in config_data['pywren']:
+        config_data['pywren']['workers'] = MAX_CONCURRENT_WORKERS
 
     if 'aws' not in config_data and 'aws_lambda' not in config_data:
         raise Exception("'aws' and 'aws_lambda' sections are mandatory in the configuration")
@@ -58,7 +58,7 @@ def load_config(config_data=None):
     if 'execution_role' not in config_data['aws_lambda']:
         raise Exception("'execution_role' is mandatory under 'aws_lambda' section")
     
-    if 'compute_backend_region' not in config_data['cloudbutton'] \
+    if 'compute_backend_region' not in config_data['pywren'] \
         and 'region_name' not in config_data['aws_lambda']:
         raise Exception("'compute_backend_region' or 'region_name' not specified")
     else:
