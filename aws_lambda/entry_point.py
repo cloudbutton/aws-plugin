@@ -16,8 +16,10 @@
 
 import logging
 import os
-from cloudbutton.config import cloud_logging_config
-from cloudbutton.engine.agent.handler import function_handler
+from pywren_ibm_cloud.version import __version__
+from pywren_ibm_cloud.config import cloud_logging_config
+from pywren_ibm_cloud.function import function_handler
+from pywren_ibm_cloud.function import function_invoker
 
 cloud_logging_config(logging.INFO)
 logger = logging.getLogger('__main__')
@@ -25,8 +27,13 @@ logger = logging.getLogger('__main__')
 
 def main(event, context):
     logger.info("Starting AWS Lambda Function execution")
-    os.environ['__OW_ACTIVATION_ID'] = context.aws_request_id
     os.environ['__PW_ACTIVATION_ID'] = context.aws_request_id
-    function_handler(event)
+    if 'remote_invoker' in event:
+        logger.info("PyWren v{} - Starting invoker".format(__version__))
+        function_invoker(event)
+    else:
+        logger.info("PyWren v{} - Starting execution".format(__version__))
+        function_handler(event)
+
     return {"Execution": "Finished"}
 
