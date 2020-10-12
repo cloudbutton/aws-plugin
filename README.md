@@ -1,8 +1,11 @@
-# Cloud Button AWS Lambda Plugin
-Cloudbutton toolkit plugin for Amazon Lambda and Amazon S3
+# This pluguin has been merged to the official [Lithops repo](https://github.com/lithops-cloud/lithops)
 
-- CloudButton Project: [http://cloudbutton.eu/](http://cloudbutton.eu/)
-- CloudButton Toolkit Github: [https://github.com/cloudbutton/cloudbutton](https://github.com/cloudbutton/cloudbutton)
+-------
+
+# Lithops AWS Lambda Plugin
+Kithops plugin for Amazon Lambda and Amazon S3
+
+- Lithops: [https://github.com/lithops-cloud/lithops](https://github.com/lithops-cloud/lithops)
 
 ### AWS Account Setup
 
